@@ -1,0 +1,10 @@
+.DS_Store
+Thumbs.db
+.vscode/
+node_modules/
+.env
+*.log
+
+# Keep private IPTV provider files out of source control if needed:
+data/playlists/private/
+data/epg/private/

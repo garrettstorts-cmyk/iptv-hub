@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="description" content="IPTV Hub - a simple TV-first PWA for legal/public IPTV streams." />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./assets/icons/icon-192.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./css/styles.css" />
+
+  <title>IPTV Hub</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar" id="homeHeader">
+      <div class="brand" tabindex="0">📺 IPTV Hub</div>
+
+      <label class="search-wrap">
+        <span class="sr-only">Search</span>
+        <input
+          id="globalSearch"
+          type="search"
+          placeholder="Search channels, movies, series..."
+          autocomplete="off"
+        />
+      </label>
+
+      <nav class="top-actions" aria-label="Primary">
+        <button class="nav-btn" data-page="live">Live TV</button>
+        <button class="nav-btn" data-page="guide">Guide</button>
+        <button class="nav-btn" data-page="favorites">Favorites</button>
+        <button class="nav-btn" data-page="settings">Settings</button>
+      </nav>
+    </header>
+
+    <main id="homeView">
+      <section class="section-block">
+        <div class="section-heading">
+          <h2>Browse by Category</h2>
+          <button class="text-btn">See All ›</button>
+        </div>
+
+        <div id="categoryRow" class="category-row"></div>
+      </section>
+
+      <section id="continueSection" class="section-block" hidden>
+        <div class="section-heading">
+          <h2>Continue Watching</h2>
+          <button class="text-btn">See All ›</button>
+        </div>
+
+        <div id="continueRow" class="continue-row"></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading">
+          <h2>Guide Preview</h2>
+          <button class="text-btn" data-page="guide">View Full Guide ›</button>
+        </div>
+
+        <p id="guidePreviewMessage" class="guide-status" role="status" hidden></p>
+        <div class="guide-shell">
+          <div class="guide-grid" id="guidePreview"></div>
+        </div>
+      </section>
+    </main>
+
+    <section id="liveView" hidden aria-labelledby="liveTitle">
+      <header class="live-header">
+        <button id="backHome" class="live-control">Back / Home</button>
+        <h1 id="liveTitle">Live TV</h1>
+        <label class="search-wrap"><span class="sr-only">Search Live TV channels</span>
+          <input id="liveSearch" type="search" placeholder="Search channels?" autocomplete="off" />
+        </label>
+        <p id="channelCount" role="status" aria-live="polite"></p>
+      </header>
+      <div class="live-filters" aria-label="Channel filters">
+        <div class="filter-row">
+          <button id="allChannels" class="live-control" aria-pressed="true">All</button>
+          <button id="favoriteChannels" class="live-control" aria-pressed="false">Favorites</button>
+          <button id="recentChannels" class="live-control" aria-pressed="false">Recently Watched</button>
+          <label>Provider <select id="providerFilter"><option value="">All providers</option></select></label>
+        </div>
+        <div id="categoryFilters" class="filter-row" aria-label="Categories"></div>
+        <label id="moreCategoriesLabel" hidden>More Categories <select id="moreCategories"></select></label>
+      </div>
+      <p id="liveMessage" role="status"></p>
+      <p id="favoritesMessage" role="status"></p>
+      <div id="channelGrid" class="channel-grid" aria-label="Live TV channels"></div>
+      <button id="loadMore" class="live-control load-more" hidden>Load More</button>
+    </section>
+    <section id="guideView" hidden aria-labelledby="guideTitle">
+      <header class="guide-page-header">
+        <button id="guideBack" class="live-control">Back</button>
+        <h1 id="guideTitle">TV Guide</h1>
+        <button id="guideEarlier" class="live-control" aria-label="Show earlier programs">Earlier</button>
+        <button id="guideLater" class="live-control" aria-label="Show later programs">Later</button>
+      </header>
+      <div class="guide-filters" aria-label="Guide filters">
+        <label>Provider <select id="guideProviderFilter"><option value="">All providers</option></select></label>
+        <label>Category <select id="guideCategoryFilter"><option value="">All categories</option></select></label>
+        <button id="guideFavoritesOnly" class="live-control" aria-pressed="false">Favorites Only</button>
+        <label class="guide-show-unmatched"><input id="showGuideLessChannels" type="checkbox" /> Show channels without guide data</label>
+      </div>
+      <p id="guideMessage" role="status" aria-live="polite"></p>
+      <div class="full-guide-grid">
+        <div class="guide-channel-pane">
+          <div class="guide-left-header">Channel</div>
+          <div id="guideChannelViewport" class="guide-channel-viewport">
+            <div id="guideChannelLayer" class="guide-channel-layer"></div>
+          </div>
+        </div>
+        <div id="guideTimelineScroll" class="guide-timeline-scroll">
+          <div id="guideTimelineContent" class="guide-timeline-content">
+            <div id="guideTimeHeaders" class="guide-time-headers"></div>
+            <div id="guideProgramViewport" class="guide-program-viewport">
+              <div id="guideProgramLayer" class="guide-program-layer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="settingsView" hidden aria-labelledby="settingsTitle">
+      <header class="guide-page-header">
+        <button id="settingsBack" class="live-control">Back</button>
+        <h1 id="settingsTitle">Settings</h1>
+      </header>
+      <div class="settings-panel">
+        <label class="settings-toggle"><input id="settingsShowGuideLess" type="checkbox" /> Show channels without guide data</label>
+        <label>Default startup screen
+          <select id="settingsStartup">
+            <option value="home">Home</option>
+            <option value="live">Live TV</option>
+            <option value="guide">Guide</option>
+          </select>
+        </label>
+        <label>Guide start preference
+          <select id="settingsGuideStart">
+            <option value="now">Current time</option>
+            <option value="half-hour">Current half hour</option>
+          </select>
+        </label>
+        <label>Channel sort
+          <select id="settingsChannelSort">
+            <option value="number">IPTV Hub number</option>
+            <option value="name">Channel name</option>
+            <option value="provider">Provider order</option>
+          </select>
+        </label>
+        <div class="settings-info-row">
+          <div><strong>Install IPTV Hub</strong><span id="installStatus" role="status" aria-live="polite">Checking availability…</span></div>
+          <button id="installApp" class="live-control" type="button" hidden>Install</button>
+        </div>
+        <div class="settings-info-row">
+          <div><strong>App mode</strong><span>How IPTV Hub is currently open</span></div>
+          <span id="appModeStatus" class="settings-value">Browser</span>
+        </div>
+        <div class="settings-info-row">
+          <div><strong>Connection</strong><span>Current network status</span></div>
+          <span id="connectionStatus" class="settings-value" role="status">Online</span>
+        </div>
+        <div class="settings-info-row" id="updateRow">
+          <div><strong>Update</strong><span id="updateStatus" role="status" aria-live="polite">IPTV Hub is up to date.</span></div>
+          <button id="updateNow" class="live-control" type="button" hidden>Update Now</button>
+        </div>
+      </div>
+    </section>
+    <dialog id="channelDetail" aria-labelledby="detailTitle">
+      <button id="closeDetail" class="live-control">Close</button>
+      <div id="detailLogo"></div>
+      <h2 id="detailTitle"></h2>
+      <p id="detailProvider"></p>
+      <p id="detailCategory"></p>
+      <p id="detailTvgId"></p>
+      <button id="watchLive" class="live-control">Watch Live</button>
+    </dialog>
+    <dialog id="programDetail" aria-labelledby="programDetailTitle">
+      <button id="closeProgramDetail" class="live-control">Close</button>
+      <h2 id="programDetailTitle"></h2>
+      <p id="programDetailChannel"></p>
+      <p id="programDetailTime"></p>
+      <p id="programDetailDescription"></p>
+      <button id="programWatchLive" class="live-control">Watch Live</button>
+    </dialog>
+  </div>
+
+  <dialog id="playerView" aria-labelledby="playerTitle">
+    <header class="player-header">
+      <div id="playerLogo"></div>
+      <div><p id="playerChannelNumber" class="player-channel-number"></p><h2 id="playerTitle"></h2><p id="playerProvider"></p><p id="playerCategory"></p></div>
+    </header>
+    <div id="playerStage">
+      <video id="liveVideo" controls playsinline tabindex="0" aria-label="Live channel video"></video>
+      <aside id="playerInfoOverlay" class="player-info-overlay" aria-live="polite" hidden>
+        <div id="playerOverlayLogo"></div>
+        <div>
+          <strong id="playerOverlayChannel"></strong>
+          <span id="playerOverlayCurrent"></span>
+          <span id="playerOverlayNext"></span>
+        </div>
+      </aside>
+    </div>
+    <p id="playbackMessage" role="status" aria-live="polite"></p>
+    <p id="playerFavoritesMessage" role="status"></p>
+    <nav id="playerControls" aria-label="Player controls">
+      <button id="closePlayer" class="live-control">Back</button>
+      <button id="previousChannel" class="live-control">Previous Channel</button>
+      <button id="nextChannel" class="live-control">Next Channel</button>
+      <button id="playerFavorite" class="live-control">Favorite</button>
+      <button id="playerFullscreen" class="live-control">Full Screen</button>
+    </nav>
+  </dialog>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/m3u-parser.js"></script>
+  <script src="./js/xmltv-parser.js"></script>
+  <script src="./js/xmltv-loader.js"></script>
+  <script src="./js/epg.js"></script>
+  <!-- Pinned stable hls.js; native playback remains available if the CDN fails. -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.7.3/dist/hls.min.js" crossorigin="anonymous"></script>
+  <script src="./js/player.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

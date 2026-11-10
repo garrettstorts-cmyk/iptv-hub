@@ -30,6 +30,7 @@
       <nav class="top-actions" aria-label="Primary">
         <button class="nav-btn" data-page="live">Live TV</button>
         <button class="nav-btn" data-page="guide">Guide</button>
+        <button class="nav-btn" data-page="sports">Sports</button>
         <button class="nav-btn" data-page="favorites">Favorites</button>
         <button class="nav-btn" data-page="settings">Settings</button>
       </nav>
@@ -121,6 +122,29 @@
           </div>
         </div>
       </div>
+    </section>
+    <section id="sportsView" hidden aria-labelledby="sportsTitle">
+      <header class="guide-page-header">
+        <button id="sportsBack" class="live-control">Back / Home</button>
+        <h1 id="sportsTitle">Sports Hub</h1>
+      </header>
+      <p class="sports-intro">Your sports channels and programming, together. Times are local; “On Now” means airing now and may include replays.</p>
+      <div class="live-filters">
+        <div id="sportsModes" class="filter-row" aria-label="Sports schedule">
+          <button class="live-control" data-sports-mode="now" aria-pressed="true">On Now</button>
+          <button class="live-control" data-sports-mode="today" aria-pressed="false">Today</button>
+          <button class="live-control" data-sports-mode="tomorrow" aria-pressed="false">Tomorrow</button>
+          <button class="live-control" data-sports-mode="channels" aria-pressed="false">Sports Channels</button>
+        </div>
+        <div class="filter-row">
+          <label>Sport <select id="sportsSport"><option value="">All sports</option></select></label>
+          <label>Provider <select id="sportsProvider"><option value="">All providers</option></select></label>
+          <label>Search <input id="sportsSearch" type="search" placeholder="Team, program, or channel" /></label>
+        </div>
+      </div>
+      <p id="sportsStatus" role="status" aria-live="polite"></p>
+      <div id="sportsGrid" class="sports-grid"></div>
+      <button id="sportsMore" class="live-control load-more" hidden>Load More</button>
     </section>
     <section id="settingsView" hidden aria-labelledby="settingsTitle">
       <header class="guide-page-header">
@@ -221,6 +245,7 @@
   <!-- Pinned stable hls.js; native playback remains available if the CDN fails. -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.7.3/dist/hls.min.js" crossorigin="anonymous"></script>
   <script src="./js/player.js"></script>
+  <script src="./js/sports.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

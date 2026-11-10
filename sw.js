@@ -1,4 +1,4 @@
-const CACHE_NAME = "iptv-hub-v21";
+const CACHE_NAME = "iptv-hub-v22";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./js/epg.js",
   "./js/player.js",
   "./js/app.js",
+  "./js/sports.js",
   "./manifest.webmanifest"
 ];
 

@@ -292,6 +292,7 @@ async function loadEpg() {
   renderContinueWatching();
   renderGuidePreview();
   if (appState.view === "guide") renderFullGuide();
+  if (appState.view === "sports") renderSports();
 }
 
 const categories = [
@@ -683,6 +684,7 @@ function playChannelFromGuide(channel, opener) {
 }
 
 function openGuide(opener) {
+  document.getElementById("sportsView").hidden = true;
   guideReturnFocus = opener || document.activeElement;
   appState.guideReturnView = appState.view === "live" ? "live" : "home";
   appState.view = "guide";
@@ -857,6 +859,7 @@ function setupKeyboardNavigation() {
       else if (modal.open) { event.preventDefault(); modal.close(); }
       else if (appState.view === "guide") { event.preventDefault(); closeGuide(); }
       else if (appState.view === "settings") { event.preventDefault(); closeSettings(); }
+      else if (appState.view === "sports") { event.preventDefault(); closeSports(); }
       else if (appState.view === "live") { event.preventDefault(); showHome(); }
       return;
     }
@@ -1047,6 +1050,7 @@ function setupConnectionStatus() {
 renderCategories();
 renderContinueWatching();
 setupLiveTV();
+setupSports();
 setupGuide();
 setupPlayer();
 setupKeyboardNavigation();
@@ -1057,6 +1061,7 @@ loadPlaylist();
 renderGuidePreview();
 setInterval(() => {
   updateNowIndicators();
+  if (appState.view === "sports" && !appState.playerOpen && !document.getElementById("programDetail").open) renderSports();
 }, 30000);
 // Favorites store IDs only; filteredChannels contains references to the loaded objects.
 function readFavorites() {
@@ -1301,6 +1306,7 @@ function showChannelDetail(channel, opener) {
 }
 
 function showHome() {
+  document.getElementById("sportsView").hidden = true;
   appState.view = "home";
   document.getElementById("liveView").hidden = true;
   document.getElementById("guideView").hidden = true;
@@ -1312,6 +1318,7 @@ function showHome() {
 
 function setupLiveTV() {
   const openLive = () => {
+    document.getElementById("sportsView").hidden = true;
     appState.view = "live";
     document.getElementById("homeView").hidden = true;
     document.getElementById("homeHeader").hidden = true;
@@ -1367,6 +1374,7 @@ function setupLiveTV() {
 
 let settingsReturnView = "home";
 function openSettings() {
+  document.getElementById("sportsView").hidden = true;
   settingsReturnView = appState.view === "live" ? "live" : appState.view === "guide" ? "guide" : "home";
   appState.view = "settings";
   document.getElementById("homeView").hidden = true;
@@ -1478,6 +1486,11 @@ function finishPlayerClose() {
   document.body.classList.remove("player-open");
   if (document.fullscreenElement === document.getElementById("playerView")) {
     document.exitFullscreen?.().catch(error => console.warn("[IPTV Hub Player] Exit fullscreen failed", error));
+  }
+  if (playerReturnView === "sports") {
+    guidePlayerOpener = null;
+    (playerReturnFocus?.isConnected ? playerReturnFocus : document.getElementById("sportsBack")).focus({ preventScroll: true });
+    return;
   }
   if (playerReturnView === "guide") {
     renderFullGuide();

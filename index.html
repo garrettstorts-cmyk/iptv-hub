@@ -68,6 +68,28 @@
       </section>
     </main>
 
+    <section id="searchView" hidden aria-labelledby="searchResultsTitle">
+      <header class="search-results-header">
+        <h1 id="searchResultsTitle">Search Results</h1>
+      </header>
+      <p id="searchResultsMessage" role="status" aria-live="polite"></p>
+      <section class="search-result-section" aria-labelledby="searchChannelsTitle">
+        <div class="section-heading">
+          <h2 id="searchChannelsTitle">Channels <span id="searchChannelCount">0</span></h2>
+        </div>
+        <div id="searchChannelResults" class="search-result-grid"></div>
+        <button id="searchChannelsMore" class="live-control" type="button" hidden>Show More Channels</button>
+      </section>
+      <section class="search-result-section" aria-labelledby="searchProgramsTitle">
+        <div class="section-heading">
+          <h2 id="searchProgramsTitle">Programs <span id="searchProgramCount">0</span></h2>
+        </div>
+        <div id="searchProgramResults" class="search-result-grid"></div>
+        <button id="searchProgramsMore" class="live-control" type="button" hidden>Show More Programs</button>
+      </section>
+      <p id="searchEmptyMessage" class="search-empty-message" hidden>No channels or programs match your search.</p>
+    </section>
+
     <section id="liveView" hidden aria-labelledby="liveTitle">
       <header class="live-header">
         <button id="backHome" class="live-control">Back / Home</button>

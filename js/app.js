@@ -12,6 +12,13 @@ const appState = window.IPTV_APP_STATE = {
   channels: [],
   filteredChannels: [],
   sortedChannels: new Map(),
+  globalSearchQuery: "",
+  searchChannelResults: [],
+  searchProgramResults: [],
+  programSearchIndex: [],
+  programSearchTitleGrams: new Map(),
+  searchChannelLimit: 20,
+  searchProgramLimit: 30,
   selectedProvider: "",
   selectedCategory: "",
   searchQuery: "",
@@ -43,6 +50,7 @@ async function loadPlaylist() {
   if (!enabledPlaylists.length) {
     appState.playlistStatus = "idle";
     refreshLiveData();
+    if (appState.view === "search") updateGlobalSearchResults();
     console.warn("[IPTV Hub] No enabled playlist configured.");
     await loadEpg();
     return;
@@ -83,6 +91,7 @@ async function loadPlaylist() {
   console.log(`[IPTV Hub] Total channels: ${appState.channels.length}`);
   logPlaylistDuplicates(enabledPlaylists);
   refreshLiveData();
+  if (appState.view === "search") updateGlobalSearchResults();
   renderContinueWatching();
   await loadEpg();
   applyStartupScreen();
@@ -288,11 +297,13 @@ async function loadEpg() {
   } else if (failed) {
     appState.epgError = `${failed} of ${sources.length} guide sources could not be loaded.`;
   }
+  buildProgramSearchIndex();
   refreshGuideFilters();
   renderContinueWatching();
   renderGuidePreview();
   if (appState.view === "guide") renderFullGuide();
   if (appState.view === "sports") renderSports();
+  if (appState.view === "search") updateGlobalSearchResults();
 }
 
 const categories = [
@@ -686,10 +697,11 @@ function playChannelFromGuide(channel, opener) {
 function openGuide(opener) {
   document.getElementById("sportsView").hidden = true;
   guideReturnFocus = opener || document.activeElement;
-  appState.guideReturnView = appState.view === "live" ? "live" : "home";
+  appState.guideReturnView = ["live", "search"].includes(appState.view) ? appState.view : "home";
   appState.view = "guide";
   document.getElementById("homeView").hidden = true;
   document.getElementById("liveView").hidden = true;
+  document.getElementById("searchView").hidden = true;
   document.getElementById("homeHeader").hidden = true;
   document.getElementById("settingsView").hidden = true;
   document.getElementById("guideView").hidden = false;
@@ -705,7 +717,8 @@ function closeGuide() {
   document.getElementById("settingsView").hidden = true;
   document.getElementById("homeView").hidden = returnView !== "home";
   document.getElementById("liveView").hidden = returnView !== "live";
-  document.getElementById("homeHeader").hidden = returnView !== "home";
+  document.getElementById("searchView").hidden = returnView !== "search";
+  document.getElementById("homeHeader").hidden = !["home", "search"].includes(returnView);
   if (guideReturnFocus?.isConnected) guideReturnFocus.focus();
   else (returnView === "live" ? document.getElementById("backHome") : document.querySelector(".top-actions [data-page='guide']")).focus();
 }
@@ -861,6 +874,14 @@ function setupKeyboardNavigation() {
       else if (appState.view === "settings") { event.preventDefault(); closeSettings(); }
       else if (appState.view === "sports") { event.preventDefault(); closeSports(); }
       else if (appState.view === "live") { event.preventDefault(); showHome(); }
+      else if (appState.view === "search") {
+        event.preventDefault();
+        appState.view = "home";
+        document.getElementById("searchView").hidden = true;
+        document.getElementById("homeView").hidden = false;
+        document.getElementById("homeHeader").hidden = false;
+        document.getElementById("globalSearch").focus();
+      }
       return;
     }
     // Preserve native text editing and select navigation.
@@ -1051,6 +1072,7 @@ renderCategories();
 renderContinueWatching();
 setupLiveTV();
 setupSports();
+setupGlobalSearch();
 setupGuide();
 setupPlayer();
 setupKeyboardNavigation();
@@ -1147,6 +1169,211 @@ function channelCategories(channel) {
   return [...new Set((channel.group || "Other").split(";").map(normalizeCategory))];
 }
 
+function normalizeSearchText(value) {
+  return String(value ?? "").normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function searchChannelRank(channel, query) {
+  const displayNumber = String(channel.displayChannelNumber ?? "");
+  const sourceNumber = String(channel.number ?? "");
+  const name = normalizeSearchText(channel.name);
+  const tvgName = normalizeSearchText(channel.tvgName);
+  const provider = normalizeSearchText(providerDisplayName(channel.provider));
+  const group = normalizeSearchText(channel.group);
+  const categories = channelCategories(channel).map(normalizeSearchText);
+  const tvgId = normalizeSearchText(channel.tvgId);
+
+  if (displayNumber === query || sourceNumber === query) return 0;
+  if (name === query) return 1;
+  if (name.startsWith(query)) return 2;
+  if (name.includes(query)) return 3;
+  if (displayNumber.includes(query) || sourceNumber.includes(query)) return 4;
+  if (tvgName.includes(query)) return 5;
+  if (provider.includes(query) || group.includes(query) || categories.some(category => category.includes(query))) return 6;
+  if (tvgId.includes(query)) return 7;
+  return null;
+}
+
+function searchTextBigrams(value) {
+  const characters = Array.from(value);
+  const grams = new Set();
+  for (let index = 0; index < characters.length - 1; index++) {
+    grams.add(characters[index] + characters[index + 1]);
+  }
+  return grams;
+}
+
+function buildProgramSearchIndex() {
+  const channelsByEpgKey = new Map();
+  for (const channel of appState.channels) {
+    if (!channel.epgChannelKey) continue;
+    if (!channelsByEpgKey.has(channel.epgChannelKey)) channelsByEpgKey.set(channel.epgChannelKey, []);
+    channelsByEpgKey.get(channel.epgChannelKey).push(channel);
+  }
+
+  const index = [];
+  const titleGrams = new Map();
+  const now = Date.now();
+  for (const [epgChannelKey, epgChannel] of appState.epgChannels) {
+    const matchedChannels = channelsByEpgKey.get(epgChannelKey) || [];
+    if (!matchedChannels.length) continue;
+    for (const programme of epgChannel.programmes) {
+      if (programme.stop <= now) continue;
+      const title = String(programme.title || "");
+      const normalizedTitle = normalizeSearchText(title);
+      if (!normalizedTitle) continue;
+      for (const channel of matchedChannels) {
+        const indexEntry = index.length;
+        index.push({ title, normalizedTitle, start: programme.start, stop: programme.stop, channel, epgChannelKey, programme });
+        for (const gram of searchTextBigrams(normalizedTitle)) {
+          if (!titleGrams.has(gram)) titleGrams.set(gram, new Set());
+          titleGrams.get(gram).add(indexEntry);
+        }
+      }
+    }
+  }
+  appState.programSearchIndex = index;
+  appState.programSearchTitleGrams = titleGrams;
+}
+
+function matchingProgramIndexes(query) {
+  const grams = [...searchTextBigrams(query)];
+  if (!grams.length) return [];
+  const sets = grams.map(gram => appState.programSearchTitleGrams.get(gram));
+  if (sets.some(set => !set)) return [];
+  sets.sort((first, second) => first.size - second.size);
+  return [...sets[0]].filter(index => sets.every(set => set.has(index)));
+}
+
+function searchPrograms(query) {
+  const now = Date.now();
+  return matchingProgramIndexes(query)
+    .map(index => appState.programSearchIndex[index])
+    .filter(result => result.stop > now && result.normalizedTitle.includes(query))
+    .map(result => ({
+      result,
+      rank: result.normalizedTitle === query ? 0 : result.normalizedTitle.startsWith(query) ? 1 : 2,
+      current: result.start <= now
+    }))
+    .sort((first, second) =>
+      first.rank - second.rank ||
+      Number(second.current) - Number(first.current) ||
+      first.result.start - second.result.start
+    )
+    .map(item => item.result);
+}
+
+function updateGlobalSearchResults() {
+  const query = normalizeSearchText(appState.globalSearchQuery);
+  const channelSearchEnabled = query.length >= 2 || /^\d$/.test(query);
+  if (!query) {
+    appState.searchChannelResults = [];
+    appState.searchProgramResults = [];
+    appState.view = "home";
+    document.getElementById("searchView").hidden = true;
+    document.getElementById("homeView").hidden = false;
+    document.getElementById("homeHeader").hidden = false;
+    return;
+  }
+
+  appState.searchChannelResults = channelSearchEnabled
+    ? appState.channels
+      .map((channel, index) => ({ channel, index, rank: searchChannelRank(channel, query) }))
+      .filter(item => item.rank !== null)
+      .sort((first, second) => first.rank - second.rank || first.index - second.index)
+      .map(item => item.channel)
+    : [];
+  appState.searchProgramResults = query.length >= 2 ? searchPrograms(query) : [];
+  appState.searchChannelLimit = 20;
+  appState.searchProgramLimit = 30;
+  appState.view = "search";
+  document.getElementById("homeView").hidden = true;
+  document.getElementById("liveView").hidden = true;
+  document.getElementById("guideView").hidden = true;
+  document.getElementById("settingsView").hidden = true;
+  document.getElementById("searchView").hidden = false;
+  document.getElementById("homeHeader").hidden = false;
+  renderSearchResults(query);
+}
+
+function searchProgramSchedule(result, now = Date.now()) {
+  const start = new Date(result.start);
+  const today = new Date(now).toDateString() === start.toDateString();
+  const date = today ? "" : start.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const isCurrent = result.start <= now && result.stop > now;
+  return {
+    date,
+    time: formatGuideTime(result.start),
+    current: isCurrent,
+    status: isCurrent ? "On Now" : `Starts ${formatGuideTime(result.start)}`
+  };
+}
+
+function renderSearchResults(query = normalizeSearchText(appState.globalSearchQuery)) {
+  const channelResults = document.getElementById("searchChannelResults");
+  const programResults = document.getElementById("searchProgramResults");
+  const message = document.getElementById("searchResultsMessage");
+  const thresholdMet = query.length >= 2 || /^\d$/.test(query);
+  document.getElementById("searchChannelCount").textContent = String(appState.searchChannelResults.length);
+  document.getElementById("searchProgramCount").textContent = String(appState.searchProgramResults.length);
+  channelResults.replaceChildren();
+  programResults.replaceChildren();
+
+  if (!thresholdMet) {
+    message.textContent = "Type at least 2 characters to search.";
+  } else {
+    message.textContent = "";
+    appState.searchChannelResults.slice(0, appState.searchChannelLimit).forEach(channel => {
+      const button = createElement("button", "search-result-card search-channel-card");
+      button.type = "button";
+      button.setAttribute("aria-label", `Channel ${displayNumber(channel)}, ${channel.name}, ${providerDisplayName(channel.provider)}`);
+      const logo = createLogo(channel);
+      logo.classList.add("search-result-art");
+      const copy = createElement("span", "search-result-copy");
+      copy.append(
+        createElement("strong", "", channel.name),
+        createElement("span", "", `Channel ${displayNumber(channel)} · ${providerDisplayName(channel.provider)}`),
+        createElement("span", "", channelCategories(channel).join(" · "))
+      );
+      button.append(logo, copy);
+      button.addEventListener("click", () => showChannelDetail(channel, button));
+      channelResults.append(button);
+    });
+
+    const now = Date.now();
+    appState.searchProgramResults.slice(0, appState.searchProgramLimit).forEach(result => {
+      const button = createElement("button", "search-result-card search-program-card");
+      button.type = "button";
+      button.dataset.guideChannelKey = channelId(result.channel);
+      button.dataset.programStart = String(result.start);
+      button.setAttribute("aria-label", `${result.title}, ${result.channel.name}, ${searchProgramSchedule(result, now).status}`);
+      const epgChannel = appState.epgChannels.get(result.epgChannelKey);
+      const logo = createLogo({ ...result.channel, logo: result.programme.icon || result.channel.logo || epgChannel?.icon || "" });
+      logo.classList.add("search-result-art");
+      const copy = createElement("span", "search-result-copy");
+      const schedule = searchProgramSchedule(result, now);
+      copy.append(
+        createElement("strong", "", result.title),
+        createElement("span", "", `${result.channel.name} · Channel ${displayNumber(result.channel)} · ${providerDisplayName(result.channel.provider)}`),
+        createElement("span", "", `${schedule.date ? `${schedule.date} · ` : ""}${schedule.current ? `${schedule.time} · ${schedule.status}` : schedule.status}`)
+      );
+      button.append(logo, copy);
+      button.addEventListener("click", () => showProgramDetail(result.channel, result.programme, button));
+      programResults.append(button);
+    });
+  }
+
+  document.getElementById("searchChannelsMore").hidden = appState.searchChannelResults.length <= appState.searchChannelLimit;
+  document.getElementById("searchProgramsMore").hidden = appState.searchProgramResults.length <= appState.searchProgramLimit;
+  document.getElementById("searchEmptyMessage").hidden =
+    !thresholdMet || appState.searchChannelResults.length > 0 || appState.searchProgramResults.length > 0;
+}
+
+function focusFirstSearchResult() {
+  const result = document.querySelector("#searchChannelResults button, #searchProgramResults button");
+  result?.focus();
+}
+
 function createElement(tag, className, text) {
   const element = document.createElement(tag);
   if (className) element.className = className;
@@ -1215,7 +1442,16 @@ function applyFilters({ preserveVisibleLimit = false } = {}) {
     (!appState.selectedCategory || channelCategories(channel).includes(appState.selectedCategory)) &&
     (!appState.favoritesOnly || appState.favorites.has(channelId(channel))) &&
     (!appState.recentOnly || appState.recentChannels.includes(channelId(channel))) &&
-    (!query || [channel.name, channel.tvgName, channel.group, providerDisplayName(channel.provider), ...channelCategories(channel)].join(" ").toLowerCase().includes(query))
+    (!query || [
+      channel.name,
+      channel.tvgName,
+      channel.displayChannelNumber,
+      channel.number,
+      channel.tvgId,
+      channel.group,
+      providerDisplayName(channel.provider),
+      ...channelCategories(channel)
+    ].some(value => String(value ?? "").toLowerCase().includes(query)))
   );
   appState.visibleLimit = preserveVisibleLimit ? visibleLimit : 100;
   document.getElementById("allChannels").setAttribute("aria-pressed", String(!appState.favoritesOnly && !appState.recentOnly && !appState.selectedCategory && !appState.selectedProvider && !appState.searchQuery));
@@ -1311,9 +1547,33 @@ function showHome() {
   document.getElementById("liveView").hidden = true;
   document.getElementById("guideView").hidden = true;
   document.getElementById("settingsView").hidden = true;
+  document.getElementById("searchView").hidden = true;
   document.getElementById("homeView").hidden = false;
   document.getElementById("homeHeader").hidden = false;
   document.querySelector(".top-actions [data-page='live']").focus();
+}
+
+function openLiveTvWithCategory(category = "") {
+  const selectedCategory = category === "Live TV" ? "" : category ? normalizeCategory(category) : "";
+  appState.selectedCategory = selectedCategory;
+  appState.selectedProvider = "";
+  appState.favoritesOnly = false;
+  appState.recentOnly = false;
+  appState.searchQuery = "";
+  document.getElementById("liveSearch").value = "";
+
+  refreshLiveData();
+  appState.selectedCategory = selectedCategory;
+  appState.selectedProvider = "";
+  document.getElementById("providerFilter").value = "";
+  appState.view = "live";
+  document.getElementById("homeView").hidden = true;
+  document.getElementById("homeHeader").hidden = true;
+  document.getElementById("guideView").hidden = true;
+  document.getElementById("settingsView").hidden = true;
+  document.getElementById("liveView").hidden = false;
+  applyFilters();
+  document.getElementById("backHome").focus();
 }
 
 function setupLiveTV() {
@@ -1324,11 +1584,16 @@ function setupLiveTV() {
     document.getElementById("homeHeader").hidden = true;
     document.getElementById("guideView").hidden = true;
     document.getElementById("settingsView").hidden = true;
+    document.getElementById("searchView").hidden = true;
     document.getElementById("liveView").hidden = false;
     refreshLiveData();
     document.getElementById("backHome").focus();
   };
   document.querySelector(".top-actions [data-page='live']").addEventListener("click", openLive);
+  document.getElementById("categoryRow").addEventListener("click", event => {
+    const tile = event.target.closest("button[data-category]");
+    if (tile) openLiveTvWithCategory(tile.dataset.category);
+  });
   document.querySelector(".top-actions [data-page='favorites']").addEventListener("click", () => {
     appState.favoritesOnly = true;
     appState.recentOnly = false;
@@ -1336,7 +1601,6 @@ function setupLiveTV() {
     document.getElementById("favoriteChannels").setAttribute("aria-pressed", "true");
   });
   document.querySelector(".top-actions [data-page='settings']").addEventListener("click", openSettings);
-  document.querySelector("[data-category='Live TV']").addEventListener("click", openLive);
   document.getElementById("backHome").addEventListener("click", showHome);
   document.getElementById("liveSearch").addEventListener("input", event => { appState.searchQuery = event.target.value; applyFilters(); });
   document.getElementById("providerFilter").addEventListener("change", event => { appState.selectedProvider = event.target.value; applyFilters(); });
@@ -1372,14 +1636,41 @@ function setupLiveTV() {
   modal.addEventListener("close", () => { if (!appState.playerOpen && detailOpener?.isConnected) detailOpener.focus(); });
 }
 
+function setupGlobalSearch() {
+  const search = document.getElementById("globalSearch");
+  search.addEventListener("input", event => {
+    appState.globalSearchQuery = event.target.value;
+    updateGlobalSearchResults();
+  });
+  search.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (appState.view !== "search") updateGlobalSearchResults();
+      focusFirstSearchResult();
+    } else if (event.key === "ArrowDown" && appState.view === "search") {
+      event.preventDefault();
+      focusFirstSearchResult();
+    }
+  });
+  document.getElementById("searchChannelsMore").addEventListener("click", () => {
+    appState.searchChannelLimit += 20;
+    renderSearchResults();
+  });
+  document.getElementById("searchProgramsMore").addEventListener("click", () => {
+    appState.searchProgramLimit += 30;
+    renderSearchResults();
+  });
+}
+
 let settingsReturnView = "home";
 function openSettings() {
   document.getElementById("sportsView").hidden = true;
-  settingsReturnView = appState.view === "live" ? "live" : appState.view === "guide" ? "guide" : "home";
+  settingsReturnView = ["live", "guide", "search"].includes(appState.view) ? appState.view : "home";
   appState.view = "settings";
   document.getElementById("homeView").hidden = true;
   document.getElementById("liveView").hidden = true;
   document.getElementById("guideView").hidden = true;
+  document.getElementById("searchView").hidden = true;
   document.getElementById("homeHeader").hidden = true;
   document.getElementById("settingsView").hidden = false;
   document.getElementById("settingsShowGuideLess").checked = appState.settings.showGuideLessChannels;
@@ -1397,10 +1688,13 @@ function closeSettings() {
   document.getElementById("homeView").hidden = settingsReturnView !== "home";
   document.getElementById("liveView").hidden = settingsReturnView !== "live";
   document.getElementById("guideView").hidden = settingsReturnView !== "guide";
-  document.getElementById("homeHeader").hidden = settingsReturnView !== "home";
+  document.getElementById("searchView").hidden = settingsReturnView !== "search";
+  document.getElementById("homeHeader").hidden = !["home", "search"].includes(settingsReturnView);
   if (settingsReturnView === "live") refreshLiveData();
   else if (settingsReturnView === "guide") renderFullGuide();
-  (document.querySelector(`.top-actions [data-page="${settingsReturnView === "guide" ? "guide" : settingsReturnView === "live" ? "live" : "settings"}"]`) || document.getElementById("settingsBack")).focus();
+  (settingsReturnView === "search" ? document.getElementById("globalSearch")
+    : document.querySelector(`.top-actions [data-page="${settingsReturnView === "guide" ? "guide" : settingsReturnView === "live" ? "live" : "settings"}"]`)
+      || document.getElementById("settingsBack")).focus();
 }
 
 function applyStartupScreen() {
@@ -1514,6 +1808,12 @@ function finishPlayerClose() {
         (!playerReturnGuideProgram || element.dataset.programStart === playerReturnGuideProgram)
       )
       || document.querySelector(".top-actions [data-page='guide']");
+    target.focus({ preventScroll: true });
+    guidePlayerOpener = null;
+    return;
+  }
+  if (playerReturnView === "search") {
+    const target = playerReturnFocus?.isConnected ? playerReturnFocus : document.getElementById("globalSearch");
     target.focus({ preventScroll: true });
     guidePlayerOpener = null;
     return;

@@ -197,6 +197,99 @@ select:focus-visible,
   letter-spacing: -0.035em;
 }
 
+.search-results-header {
+  margin: 23px 0 12px;
+}
+
+.search-results-header h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 2vw, 2rem);
+}
+
+.search-result-section {
+  margin: 23px 0 25px;
+}
+
+.search-result-section .section-heading {
+  justify-content: flex-start;
+}
+
+.search-result-section .section-heading h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.search-result-section .section-heading h2 span {
+  color: var(--text-secondary);
+  font-size: 0.8em;
+  font-weight: 550;
+}
+
+.search-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+}
+
+.search-result-card {
+  display: flex;
+  min-width: 0;
+  min-height: 104px;
+  align-items: center;
+  gap: 15px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: linear-gradient(150deg, #141d2e, #101725 75%);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result-card:hover,
+.search-result-card:focus-visible {
+  border-color: var(--accent);
+  background: linear-gradient(150deg, #1a2440, #121a2b 75%);
+}
+
+.search-result-art {
+  width: 76px;
+  min-width: 76px;
+  height: 76px;
+}
+
+.search-result-art .channel-initials {
+  font-size: 1.3rem;
+}
+
+.search-result-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.search-result-copy strong,
+.search-result-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-copy strong {
+  font-size: 1.02rem;
+}
+
+.search-result-copy span {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.search-empty-message {
+  margin: 26px 0;
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+}
+
 .text-btn {
   min-height: 44px;
   padding: 0 4px 0 12px;

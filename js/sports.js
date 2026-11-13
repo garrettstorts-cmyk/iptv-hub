@@ -64,11 +64,11 @@ function openSports() {
   [...new Set(appState.channels.map(channel => channel.provider))].sort().forEach(value => provider.add(new Option(providerDisplayName(value), value)));
   provider.value = sportsState.provider;
   renderSports();
-  document.getElementById("sportsBack").focus();
+  focusSpatialElement(document.getElementById("sportsBack"));
 }
 function closeSports() {
   showHome();
-  document.querySelector('[data-page="sports"]').focus();
+  focusSpatialElement(document.querySelector('[data-page="sports"]'));
 }
 function renderSports() {
   const now = Date.now();
@@ -104,7 +104,7 @@ function renderSports() {
   grid.replaceChildren(...cards);
   if (activeKey) {
     const replacement = cards.find(card => card.dataset.sportsKey === activeKey)?.querySelector(`[data-sports-action="${activeAction}"]`);
-    (replacement || document.getElementById("sportsBack")).focus({ preventScroll: true });
+    focusSpatialElement(replacement || document.getElementById("sportsBack"));
   }
   document.getElementById("sportsMore").hidden = entries.length <= sportsState.limit;
   let status = `${entries.length} ${sportsState.mode === "channels" ? "channels" : "programs"} · Showing ${cards.length}. Based on provider guide listings; scores and live-event verification are unavailable.`;
@@ -133,6 +133,6 @@ function setupSports() {
     const previous = document.querySelectorAll(".sports-card").length;
     sportsState.limit += 60;
     renderSports();
-    document.querySelectorAll(".sports-card")[previous]?.querySelector("button").focus();
+    focusSpatialElement(document.querySelectorAll(".sports-card")[previous]?.querySelector("button"));
   });
 }

@@ -2,6 +2,8 @@
 
 A lightweight, TV-first Progressive Web App starter for organizing legal/public IPTV playlists and XMLTV guide data.
 
+TV remote arrows navigate by the on-screen spatial layout, while text editing and player-control navigation keep their specialized behavior.
+
 ## Folder structure
 
 ```text
@@ -50,10 +52,9 @@ Recommended:
 4. Fetch and parse one XMLTV guide.
 5. Match `tvg-id` from M3U to XMLTV `channel id`.
 6. Add a real `<video>` player using hls.js.
-7. Improve remote-control spatial navigation.
-8. Add favorites and continue-watching data using IndexedDB/localStorage.
-9. Add a full-screen guide view.
-10. Test on your TV browser.
+7. Add favorites and continue-watching data using IndexedDB/localStorage.
+8. Add a full-screen guide view.
+9. Test on your TV browser.
 
 ## Important
 

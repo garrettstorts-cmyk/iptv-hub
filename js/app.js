@@ -671,12 +671,12 @@ function showProgramDetail(channel, programme, opener) {
   document.getElementById("programDetailTime").textContent = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
   document.getElementById("programDetailDescription").textContent = programme.desc || "No description available.";
   document.getElementById("programDetail").showModal();
-  document.getElementById("closeProgramDetail").focus();
+  focusSpatialElement(document.getElementById("closeProgramDetail"));
 }
 
 function restoreProgramFocus() {
   if (guideProgramOpener?.isConnected) {
-    guideProgramOpener.focus();
+    focusSpatialElement(guideProgramOpener);
     return;
   }
   const channelKey = guideProgramOpener?.dataset.guideChannelKey;
@@ -685,7 +685,7 @@ function restoreProgramFocus() {
   const target = candidates.find(element =>
     element.dataset.guideChannelKey === channelKey && element.dataset.programStart === start
   );
-  (target || (appState.view === "guide" ? document.getElementById("guideBack") : document.querySelector("[data-page='guide']"))).focus();
+  focusSpatialElement(target || (appState.view === "guide" ? document.getElementById("guideBack") : document.querySelector("[data-page='guide']")));
 }
 
 function playChannelFromGuide(channel, opener) {
@@ -707,7 +707,7 @@ function openGuide(opener) {
   document.getElementById("guideView").hidden = false;
   document.getElementById("guideProgramViewport").scrollTop = 0;
   renderFullGuide();
-  document.getElementById("guideBack").focus();
+  focusSpatialElement(document.getElementById("guideBack"));
 }
 
 function closeGuide() {
@@ -719,8 +719,9 @@ function closeGuide() {
   document.getElementById("liveView").hidden = returnView !== "live";
   document.getElementById("searchView").hidden = returnView !== "search";
   document.getElementById("homeHeader").hidden = !["home", "search"].includes(returnView);
-  if (guideReturnFocus?.isConnected) guideReturnFocus.focus();
-  else (returnView === "live" ? document.getElementById("backHome") : document.querySelector(".top-actions [data-page='guide']")).focus();
+  focusSpatialElement(guideReturnFocus?.isConnected
+    ? guideReturnFocus
+    : returnView === "live" ? document.getElementById("backHome") : document.querySelector(".top-actions [data-page='guide']"));
 }
 
 function shiftGuideWindow(minutes) {
@@ -781,7 +782,7 @@ function handleGuideKey(event) {
       .sort((first, second) => Math.abs(Number(first.dataset.programCenter) - center) - Math.abs(Number(second.dataset.programCenter) - center));
     if (neighbors.length) {
       event.preventDefault();
-      neighbors[0].focus();
+      focusSpatialElement(neighbors[0]);
       return true;
     }
   }
@@ -863,13 +864,14 @@ function setupKeyboardNavigation() {
   document.addEventListener("keydown", event => {
     if (event.defaultPrevented) return;
     if (appState.playerOpen) return; // The player owns its keys; native video controls keep theirs.
-    const modal = document.getElementById("channelDetail");
     const programModal = document.getElementById("programDetail");
-    const editing = event.target.matches("input, textarea, select, [contenteditable='true']");
     if (appState.view === "guide" && !programModal.open && handleGuideKey(event)) return;
+    const editing = event.target.matches(
+      "textarea, select, [contenteditable='true'], input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset'])"
+    );
     if (event.key === "Escape" || (event.key === "Backspace" && (!editing || appState.view === "settings"))) {
       if (programModal.open) { event.preventDefault(); programModal.close(); }
-      else if (modal.open) { event.preventDefault(); modal.close(); }
+      else if (document.getElementById("channelDetail").open) { event.preventDefault(); document.getElementById("channelDetail").close(); }
       else if (appState.view === "guide") { event.preventDefault(); closeGuide(); }
       else if (appState.view === "settings") { event.preventDefault(); closeSettings(); }
       else if (appState.view === "sports") { event.preventDefault(); closeSports(); }
@@ -880,36 +882,50 @@ function setupKeyboardNavigation() {
         document.getElementById("searchView").hidden = true;
         document.getElementById("homeView").hidden = false;
         document.getElementById("homeHeader").hidden = false;
-        document.getElementById("globalSearch").focus();
+        focusSpatialElement(document.getElementById("globalSearch"));
       }
       return;
     }
-    // Preserve native text editing and select navigation.
-    if (editing || modal.open || !event.key.startsWith("Arrow")) return;
-    const card = event.target.closest(".channel-card");
-    if (card && appState.view === "live") {
-      const cards = [...document.querySelectorAll(".channel-card")];
-      const index = cards.indexOf(card);
-      const columns = getComputedStyle(document.getElementById("channelGrid")).gridTemplateColumns.split(" ").length;
-      let next = index;
-      if (event.key === "ArrowRight" && index % columns < columns - 1) next++;
-      if (event.key === "ArrowLeft" && index % columns > 0) next--;
-      if (event.key === "ArrowDown") next = Math.min(index + columns, cards.length - 1);
-      if (event.key === "ArrowUp") next = index - columns;
-      event.preventDefault();
-      if (next < 0) document.getElementById("liveSearch").focus();
-      else cards[Math.min(next, cards.length - 1)]?.querySelector(".channel-select").focus();
+    const direction = {
+      ArrowUp: "up",
+      ArrowDown: "down",
+      ArrowLeft: "left",
+      ArrowRight: "right"
+    }[event.key];
+    if (editing || !direction) return;
+
+    const dialog = document.querySelector("dialog[open]");
+    const scope = dialog || document;
+    const current = document.activeElement;
+    const focusable = window.IPTVSpatialNavigation.getFocusableElements(scope);
+    event.preventDefault();
+    if (dialog && !dialog.contains(current)) {
+      focusSpatialElement(focusable[0]);
       return;
     }
-    const scope = appState.view === "live" ? document.getElementById("liveView") : document;
-    const focusable = [...scope.querySelectorAll("button, input, select, [tabindex='0']")]
-      .filter(el => !el.disabled && el.getClientRects().length);
-    const index = focusable.indexOf(document.activeElement);
-    if (index < 0) return;
-    event.preventDefault();
-    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
-    focusable[Math.max(0, Math.min(index + delta, focusable.length - 1))]?.focus();
+    const categoryRow = current.closest("#categoryRow");
+    const candidatesForDirection = categoryRow && direction === "down"
+      ? window.IPTVSpatialNavigation.getFocusableElements(
+        document.getElementById(document.getElementById("continueSection").hidden ? "guidePreview" : "continueRow")
+      )
+      : focusable;
+    const channelCard = appState.view === "live" ? current.closest(".channel-card") : null;
+    const candidates = channelCard
+      ? candidatesForDirection.filter(element => !element.closest(".channel-card") || element.matches(".channel-select"))
+      : candidatesForDirection;
+    const next = window.IPTVSpatialNavigation.findNextFocusable(current, direction, candidates);
+    if (next) focusSpatialElement(next);
   });
+}
+
+function focusSpatialElement(element) {
+  if (!element) return;
+  element.focus({ preventScroll: true });
+  const rect = element.getBoundingClientRect();
+  if (rect.width && rect.height &&
+      (rect.top < 0 || rect.left < 0 || rect.bottom > window.innerHeight || rect.right > window.innerWidth)) {
+    element.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
 }
 
 let installPromptEvent = null;
@@ -1371,7 +1387,7 @@ function renderSearchResults(query = normalizeSearchText(appState.globalSearchQu
 
 function focusFirstSearchResult() {
   const result = document.querySelector("#searchChannelResults button, #searchProgramResults button");
-  result?.focus();
+  focusSpatialElement(result);
 }
 
 function createElement(tag, className, text) {
@@ -1518,7 +1534,7 @@ function toggleFavorite(channel, button, fromPlayer = false) {
     const index = [...document.querySelectorAll(".favorite-button")].indexOf(button);
     applyFilters();
     const remaining = document.querySelectorAll(".favorite-button");
-    (remaining[Math.min(index, remaining.length - 1)] || document.getElementById("favoriteChannels")).focus();
+    focusSpatialElement(remaining[Math.min(index, remaining.length - 1)] || document.getElementById("favoriteChannels"));
   } else {
     // Multiple stream variants can share one tvg-id and therefore one favorite.
     document.querySelectorAll(".favorite-button").forEach((item, index) => updateFavoriteButton(item, appState.filteredChannels[index]));
@@ -1538,7 +1554,7 @@ function showChannelDetail(channel, opener) {
   document.getElementById("detailTvgId").textContent = channel.tvgId ? `tvg-id: ${channel.tvgId}` : "";
   // Selection opens details; only Watch Live starts playback.
   document.getElementById("channelDetail").showModal();
-  document.getElementById("closeDetail").focus();
+  focusSpatialElement(document.getElementById("closeDetail"));
 }
 
 function showHome() {
@@ -1550,7 +1566,7 @@ function showHome() {
   document.getElementById("searchView").hidden = true;
   document.getElementById("homeView").hidden = false;
   document.getElementById("homeHeader").hidden = false;
-  document.querySelector(".top-actions [data-page='live']").focus();
+  focusSpatialElement(document.querySelector(".top-actions [data-page='live']"));
 }
 
 function openLiveTvWithCategory(category = "") {
@@ -1573,7 +1589,7 @@ function openLiveTvWithCategory(category = "") {
   document.getElementById("settingsView").hidden = true;
   document.getElementById("liveView").hidden = false;
   applyFilters();
-  document.getElementById("backHome").focus();
+  focusSpatialElement(document.getElementById("backHome"));
 }
 
 function setupLiveTV() {
@@ -1587,7 +1603,7 @@ function setupLiveTV() {
     document.getElementById("searchView").hidden = true;
     document.getElementById("liveView").hidden = false;
     refreshLiveData();
-    document.getElementById("backHome").focus();
+    focusSpatialElement(document.getElementById("backHome"));
   };
   document.querySelector(".top-actions [data-page='live']").addEventListener("click", openLive);
   document.getElementById("categoryRow").addEventListener("click", event => {
@@ -1629,11 +1645,13 @@ function setupLiveTV() {
     const previous = document.getElementById("channelGrid").children.length;
     appState.visibleLimit += 100;
     renderChannels(true);
-    document.querySelectorAll(".channel-select")[previous]?.focus();
+    focusSpatialElement(document.querySelectorAll(".channel-select")[previous]);
   });
   const modal = document.getElementById("channelDetail");
   document.getElementById("closeDetail").addEventListener("click", () => modal.close());
-  modal.addEventListener("close", () => { if (!appState.playerOpen && detailOpener?.isConnected) detailOpener.focus(); });
+  modal.addEventListener("close", () => {
+    if (!appState.playerOpen && detailOpener?.isConnected) focusSpatialElement(detailOpener);
+  });
 }
 
 function setupGlobalSearch() {
@@ -1679,7 +1697,7 @@ function openSettings() {
   document.getElementById("settingsChannelSort").value = appState.settings.channelSort;
   renderInstallStatus();
   renderConnectionStatus();
-  document.getElementById("settingsBack").focus();
+  focusSpatialElement(document.getElementById("settingsBack"));
 }
 
 function closeSettings() {
@@ -1692,9 +1710,9 @@ function closeSettings() {
   document.getElementById("homeHeader").hidden = !["home", "search"].includes(settingsReturnView);
   if (settingsReturnView === "live") refreshLiveData();
   else if (settingsReturnView === "guide") renderFullGuide();
-  (settingsReturnView === "search" ? document.getElementById("globalSearch")
+  focusSpatialElement(settingsReturnView === "search" ? document.getElementById("globalSearch")
     : document.querySelector(`.top-actions [data-page="${settingsReturnView === "guide" ? "guide" : settingsReturnView === "live" ? "live" : "settings"}"]`)
-      || document.getElementById("settingsBack")).focus();
+      || document.getElementById("settingsBack"));
 }
 
 function applyStartupScreen() {
@@ -1768,7 +1786,7 @@ function openPlayer() {
   document.body.classList.add("player-open");
   document.getElementById("playerFavoritesMessage").textContent = "";
   startPlayerChannel(appState.selectedChannel);
-  document.getElementById("closePlayer").focus();
+  focusSpatialElement(document.getElementById("closePlayer"));
 }
 
 function finishPlayerClose() {
@@ -1778,12 +1796,19 @@ function finishPlayerClose() {
   appState.playbackStatus = "idle";
   appState.playbackError = null;
   document.body.classList.remove("player-open");
-  if (document.fullscreenElement === document.getElementById("playerView")) {
-    document.exitFullscreen?.().catch(error => console.warn("[IPTV Hub Player] Exit fullscreen failed", error));
+  const fullscreenElement = document.fullscreenElement;
+  const modal = document.getElementById("playerView");
+  if (fullscreenElement && modal.contains(fullscreenElement)) {
+    const exitFullscreen = document.exitFullscreen;
+    if (exitFullscreen) {
+      Promise.resolve(exitFullscreen.call(document)).catch(error =>
+        console.warn("[IPTV Hub Player] Exit fullscreen failed", error)
+      );
+    }
   }
   if (playerReturnView === "sports") {
     guidePlayerOpener = null;
-    (playerReturnFocus?.isConnected ? playerReturnFocus : document.getElementById("sportsBack")).focus({ preventScroll: true });
+    focusSpatialElement(playerReturnFocus?.isConnected ? playerReturnFocus : document.getElementById("sportsBack"));
     return;
   }
   if (playerReturnView === "guide") {
@@ -1794,7 +1819,7 @@ function finishPlayerClose() {
         element.dataset.guideChannelKey === playerReturnGuideChannel &&
         (!playerReturnGuideProgram || element.dataset.programStart === playerReturnGuideProgram)
       ) || document.getElementById("guideBack");
-    target.focus({ preventScroll: true });
+    focusSpatialElement(target);
     guidePlayerOpener = null;
     return;
   }
@@ -1808,13 +1833,13 @@ function finishPlayerClose() {
         (!playerReturnGuideProgram || element.dataset.programStart === playerReturnGuideProgram)
       )
       || document.querySelector(".top-actions [data-page='guide']");
-    target.focus({ preventScroll: true });
+    focusSpatialElement(target);
     guidePlayerOpener = null;
     return;
   }
   if (playerReturnView === "search") {
     const target = playerReturnFocus?.isConnected ? playerReturnFocus : document.getElementById("globalSearch");
-    target.focus({ preventScroll: true });
+    focusSpatialElement(target);
     guidePlayerOpener = null;
     return;
   }
@@ -1828,7 +1853,7 @@ function finishPlayerClose() {
     document.querySelectorAll(".favorite-button").forEach((button, index) => updateFavoriteButton(button, appState.filteredChannels[index]));
   }
   const target = playerReturnFocus?.isConnected ? playerReturnFocus : document.querySelectorAll(".channel-select")[Math.max(0, Math.min(openerIndex, document.querySelectorAll(".channel-select").length - 1))];
-  (target || document.getElementById("favoriteChannels")).focus({ preventScroll: true });
+  focusSpatialElement(target || document.getElementById("favoriteChannels"));
   window.scrollTo(0, playerReturnScroll);
 }
 
@@ -1852,7 +1877,7 @@ function setupPlayer() {
       const channel = appState.filteredChannels[index + delta];
       if (index >= 0 && channel) startPlayerChannel(channel);
       // Keep focus on a usable control at the end of the filtered list.
-      if (document.activeElement.disabled) document.getElementById("closePlayer").focus();
+      if (document.activeElement.disabled) focusSpatialElement(document.getElementById("closePlayer"));
     });
   }
   document.addEventListener("keydown", event => {
@@ -1871,8 +1896,27 @@ function setupPlayer() {
   });
   document.getElementById("playerFullscreen").addEventListener("click", async () => {
     try {
-      if (document.fullscreenElement === modal) await document.exitFullscreen();
-      else if (modal.requestFullscreen) await modal.requestFullscreen();
+      const fullscreenElement = document.fullscreenElement;
+      if (fullscreenElement && modal.contains(fullscreenElement)) {
+        const exitFullscreen = document.exitFullscreen;
+        if (!exitFullscreen) throw new Error("Fullscreen exit is not supported");
+        await exitFullscreen.call(document);
+        return;
+      }
+
+      const stage = document.getElementById("playerStage");
+      const stageRequest = stage.requestFullscreen;
+      const videoRequest = video.requestFullscreen;
+      if (stageRequest) {
+        try {
+          await stageRequest.call(stage);
+          return;
+        } catch (stageError) {
+          if (!videoRequest) throw stageError;
+        }
+      }
+      if (!videoRequest) throw new Error("Fullscreen is not supported");
+      await videoRequest.call(video);
     } catch (error) { console.warn("[IPTV Hub Player] Fullscreen unavailable; keeping full-window view", error); }
   });
   modal.addEventListener("keydown", event => {
@@ -1887,7 +1931,10 @@ function setupPlayer() {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       const controls = [...modal.querySelectorAll("button")].filter(button => !button.disabled);
       const index = controls.indexOf(document.activeElement);
-      if (index >= 0) { event.preventDefault(); controls[Math.max(0, Math.min(index + (event.key === "ArrowRight" ? 1 : -1), controls.length - 1))].focus(); }
+      if (index >= 0) {
+        event.preventDefault();
+        focusSpatialElement(controls[Math.max(0, Math.min(index + (event.key === "ArrowRight" ? 1 : -1), controls.length - 1))]);
+      }
     }
   });
   window.addEventListener("pagehide", () => { if (appState.playerOpen) closePlayer(); else IPTVPlayer.stop(); });
